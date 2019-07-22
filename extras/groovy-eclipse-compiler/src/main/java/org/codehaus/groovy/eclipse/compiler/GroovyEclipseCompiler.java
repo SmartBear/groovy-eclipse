@@ -63,6 +63,7 @@ import org.codehaus.plexus.util.cli.Commandline;
  */
 @Component(role = Compiler.class, hint = "groovy-eclipse-compiler")
 public class GroovyEclipseCompiler extends AbstractCompiler {
+    private static final String PREDEFINED_JAVA9_ADD_EXPORTS_COMMAND = "--add-exports";
 
     // IMPORTANT!!! This class must not reference any JDT classes directly.  It must be loadable even if batch compiler is absent.
 
@@ -337,6 +338,7 @@ public class GroovyEclipseCompiler extends AbstractCompiler {
             }
         }
 
+        boolean addExprortsIsActive = false;
         for (Map.Entry<String, String> entry : config.getCustomCompilerArgumentsAsMap().entrySet()) {
             String key = entry.getKey();
             if (startsWithHyphen(key)) {
@@ -348,8 +350,10 @@ public class GroovyEclipseCompiler extends AbstractCompiler {
                     vmArgs.add(key.substring(2));
                 }
             } else if (!"org.osgi.framework.system.packages".equals(key)) { // GRECLIPSE-1418: ignore the system packages option
-                args.put("-" + key, entry.getValue());
+                String prefix = addExprortsIsActive ? "" : "-";
+                args.put(prefix + key, entry.getValue());
             }
+            addExprortsIsActive = PREDEFINED_JAVA9_ADD_EXPORTS_COMMAND.equals(key);
         }
 
         args.putAll(composeSourceFiles(sourceFiles));
@@ -633,16 +637,29 @@ public class GroovyEclipseCompiler extends AbstractCompiler {
     private static String[] flattenArgumentsMap(Map<String, String> args) {
         List<String> argsList = new ArrayList<>(args.size() * 2);
 
+        boolean predefineJava9WordIsActive = false;
         for (Map.Entry<String, String> entry : args.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key != null && key.length() > 0) {
-                argsList.add(key);
+                if (predefineJava9WordIsActive) {
+                    String[] stringsArray;
+                    String delimeter = ",";
+                    stringsArray = key.split(delimeter);
+                    argsList.add(stringsArray[0]);
+                    for (int index = 1; index < stringsArray.length; index++) {
+                        argsList.add(PREDEFINED_JAVA9_ADD_EXPORTS_COMMAND);
+                        argsList.add(stringsArray[index]);
+                    }
+                } else {
+                    argsList.add(key);
+                }
                 // adds value only if key is actually defined
                 if (isNotBlank(value)) {
                     argsList.add(value);
                 }
             }
+            predefineJava9WordIsActive = PREDEFINED_JAVA9_ADD_EXPORTS_COMMAND.equals(key);
         }
 
         return argsList.toArray(new String[0]);
